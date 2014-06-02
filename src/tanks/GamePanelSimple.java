@@ -1,3 +1,4 @@
+package tanks;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Dimension;
@@ -8,23 +9,26 @@ import java.awt.RenderingHints;
 import java.awt.Shape;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
-import java.awt.event.MouseMotionListener;
-import java.awt.geom.Ellipse2D;
+import java.util.ArrayList;
+import java.util.Hashtable;
+import java.util.List;
 
-import javax.swing.JPanel;
+import jpl.Atom;
+import jpl.Query;
+import jpl.Term;
+import jpl.Util;
+import jpl.Variable;
 
-public class GamePanel extends JPanel implements MouseListener, MouseMotionListener{
+public class GamePanelSimple extends Game implements MouseListener{
 
 	private static final long serialVersionUID = 5128406007754605413L;
-
-	private EnergyChangeListener energyChangeListener;
 
 	// Circle width and offset (for cities)
 	private static final int cW = 11;
 	private static final int cOff = (cW - 1) / 2;
 
-	private Street[] streets;
-	private City[] cities;
+	private List<Street> streets;
+	private List<City> cities;
 
 	// Tank offset
 	private static final int tXOff = -7;
@@ -53,16 +57,18 @@ public class GamePanel extends JPanel implements MouseListener, MouseMotionListe
 	private final Color hoverFill = new Color(0, 140, 255, 155);
 	private final Color hoverOutline = new Color(0, 13, 199, 155);
 
-	private Tank selectedTank;
-
 	private int energy = 100;
 
-	public GamePanel(City[] cities, Street[] streets) {
+	public GamePanelSimple(List<City> cities, List<Street> streets) {
 		super();
 		this.cities = cities;
 		this.streets = streets;
 		addMouseListener(this);
-		addMouseMotionListener(this);
+		
+		// Get initial list of tanks
+		Query q = new Query("initialTankPositions", new Term[]{new Variable("TankList")});
+		Hashtable<?, ?> result = q.oneSolution();
+		loadTanksFromTerm((Term)result.get("TankList"));
 	}
 
 	@Override
@@ -79,7 +85,7 @@ public class GamePanel extends JPanel implements MouseListener, MouseMotionListe
 		g2d.setColor(Color.black);
 		g2d.setStroke(new BasicStroke(2, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
 		for(Street s : streets)
-			g2d.drawLine(s.startX, s.startY, s.endX, s.endY);
+			g2d.drawLine(s.startX(), s.startY(), s.endX(), s.endY());
 
 		// Draw cities and tanks
 		g2d.setStroke(new BasicStroke(0.01f));
@@ -104,20 +110,12 @@ public class GamePanel extends JPanel implements MouseListener, MouseMotionListe
 					g2d.drawLine(tX + tankOutX[i], tY + tankOutY[i], tX + tankOutX[i], tY + tankOutY[i]);
 
 				// Tank fill colour
-
 				if(tank.friendly()) g2d.setColor(Color.green);
 				else g2d.setColor(Color.red);
-
-				// Highlight selected tank
-				if(selectedTank != null && selectedTank.equals(tank))
-					g2d.setColor(g2d.getColor().darker().darker());
 
 				// Draw tank fill
 				for(int i = 0; i < tankInX.length; i++)
 					g2d.drawLine(tankInX[i] + tX, tankInY[i] + tY, tankInX[i] + tX, tankInY[i] + tY);
-
-				g2d.setColor(Color.cyan);
-				g2d.drawLine(c.x, c.y, c.x, c.y);
 			}
 
 		}
@@ -131,38 +129,69 @@ public class GamePanel extends JPanel implements MouseListener, MouseMotionListe
 	}
 
 	public void tankClicked(Tank tank){
-		if(selectedTank == null){
-			// Tank has been selected
-			selectedTank = tank;
-		}else{
-			// Tank was already selected and we're clicking another one
-			if(canAttack(selectedTank, tank)){
-				attack(selectedTank, tank);
-				repaint();
-			}
+		// This method calls: tanksKillable(TankLocation, TankList, Move, Killable) in tanks.pl
+
+		// Query to find streets
+		Term arg[] = 
+			{new Atom(tank.getCity().name), 
+				toTankList(), 
+				new Variable("Move"), 
+				new Variable("Killable")};
+		Query    q = new Query("tanksKillable", arg);
+		
+		Hashtable<?,?> result = (Hashtable<?, ?>)q.oneSolution();
+		Term move = (Term)result.get("Move");
+		Term killable = (Term)result.get("Killable");
+
+		StringBuilder moves = new StringBuilder("[");
+		Term[] moveTerms = move.toTermArray();
+		for(int i = 0; i < moveTerms.length; i++){
+			String comma = i + 1 != moveTerms.length ? ", " : "";
+			moves.append(String.format("%s%s", moveTerms[i].toString(), comma));
+		}
+		moves.append("]");
+		System.out.printf("Killable: %s\nMove: %s\n", killable.toString(), moves.toString());
+
+	}
+
+	public Term toTankList(){
+		StringBuilder tankString = new StringBuilder("[");
+
+		List<Tank> tanks = tanks();
+		for(int i = 0; i < tanks.size(); i++){
+			Tank t = tanks.get(i);
+			String team = t.friendly() ? "black" : "red";
+			String city = t.getCity().name;
+			String comma = i + 1 != tanks.size() ? ", " : ""; 
+			tankString.append(String.format("tank(%s, %s)%s", team, city, comma));	
+		}
+		tankString.append("]");
+		return Util.textToTerm(tankString.toString());
+	}
+	
+	private void loadTanksFromTerm(Term tankTerm){
+		Term[] tankArray = tankTerm.toTermArray();
+		for(Term t : tankArray){
+			Term[] arg = t.args();
+			boolean friendly = arg[0].toString().equals("black");
+			City c = nameToCity(arg[1].toString());
+			c.setTank(new Tank(friendly));
 		}
 	}
-
-	private void attack(Tank attacker, Tank victim) {
-		victim.getCity().removeTank();
-		energy -= 25;
-		if(energyChangeListener != null) energyChangeListener.energyChanged(energy);
+	
+	private City nameToCity(String name){
+		for(City c : cities){
+			if(c.name.equals(name)) return c;
+		}
+		return null;
 	}
 
-	private boolean canAttack(Tank attacker, Tank victim) {
-		return (attacker.friendly() != victim.friendly() && // Not on same team
-				energy - 25 >= 0 && // Enough energy
-				adjacent(attacker.getCity(), victim.getCity())); // Adjacent cities
+	private List<Tank> tanks(){
+		List<Tank> tanks = new ArrayList<Tank>();
+		for(City c : cities)
+			if(c.getTank() != null) tanks.add(c.getTank());
 
-	}
-
-	private boolean adjacent(City city, City city2) {
-		// TODO
-		return true;
-	}
-
-	public void cityClicked(City city){
-		System.out.println("You clicked: " + city);
+		return tanks;
 	}
 
 	@Override
@@ -183,54 +212,6 @@ public class GamePanel extends JPanel implements MouseListener, MouseMotionListe
 					break;
 				}
 			}
-
-			if(new Ellipse2D.Double(c.x - cOff, c.y - cOff, cW, cW).contains(x, y)){
-				cityClicked(c);
-				break;
-			}
-		}
-	}
-
-	@Override
-	public void mouseMoved(MouseEvent arg0) {
-		int x = arg0.getX();
-		int y = arg0.getY();
-
-		boolean hover = false;
-
-		// See if we've clicked a city or it's tank if it has one
-		for(City c : cities){
-			if(c.getTank() != null){
-				int tX = c.x + tXOff;
-				int tY = c.y + tYOff;
-
-				Rectangle rectangle;
-				if((rectangle = new Rectangle(tX, tY, 16, 14)).contains(x,  y)){
-					hover = true;
-					if(hoverShape != null && hoverShape.equals(rectangle)){
-						break;
-					}
-					hoverShape = rectangle;
-					repaint();
-					break;
-				}
-			}
-
-			Ellipse2D.Double circle;
-			if((circle = new Ellipse2D.Double(c.x - cOff, c.y - cOff, cW, cW)).contains(x, y)){
-				hover = true;
-				if(hoverShape != null && hoverShape.equals(circle)){
-					break;
-				}
-				hoverShape = circle;
-				repaint();
-				break;
-			}
-		}
-		if(!hover){
-			Shape temp = hoverShape;
-			hoverShape = null;
-			if(temp != null) repaint();
 		}
 	}
 
@@ -244,19 +225,25 @@ public class GamePanel extends JPanel implements MouseListener, MouseMotionListe
 		return new Dimension(500,500);
 	}
 
-	public void setScoreChangeListener(EnergyChangeListener listener){
-		this.energyChangeListener = listener;
+	public void setScoreChangeListener(GameChangeListener listener){
+		this.gameChangeListener = listener;
 	}
 
 	@Override	public void mouseExited(MouseEvent arg0) {}
 	@Override	public void mousePressed(MouseEvent arg0) {}
 	@Override	public void mouseReleased(MouseEvent arg0) {}
-	@Override	public void mouseDragged(MouseEvent arg0) {}
 	@Override	public void mouseEntered(MouseEvent arg0) {}
 
+	public void setGameChangeListener(GameChangeListener listener){
+		this.gameChangeListener = listener;
+	}
 
-	public interface EnergyChangeListener{
-		public void energyChanged(int newScore);
+	@Override
+	public void endTurn() {
+	}
+
+	@Override
+	public void startGame() {
 	}
 
 }

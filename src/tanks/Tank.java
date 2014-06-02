@@ -1,3 +1,4 @@
+package tanks;
 public class Tank{
 	public final boolean friendly;
 	private City city;
