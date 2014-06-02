@@ -1,14 +1,47 @@
 % road(city1, city2, cost).
-road(a, b, 10).
-road(a, c, 5).
-road(b, d, 2).
-road(d, c, 10).
+road(one, two, 30).
+road(one, four, 30).
+road(one, six, 30).
+road(two, three, 30).
+road(two, four, 30).
+road(two, five, 30).
+road(two, seven, 30).
+road(three, five, 30).
+road(three, eight, 30).
+road(four, six, 30).
+road(four, seven, 30).
+road(five, seven, 30).
+road(five, eight, 30).
+road(six, seven, 30).
+road(six, nine, 30).
+road(six, eleven, 30).
+road(seven, eight, 30).
+road(seven, nine, 30).
+road(seven, ten, 30).
+road(seven, twelve, 30).
+road(eight, ten, 30).
+road(eight, thirteen, 30).
+road(nine, eleven, 30).
+road(nine, twelve, 30).
+road(ten, twelve, 30).
+road(ten, thirteen, 30).
+road(eleven, twelve, 30).
+road(twelve, thirteen, 30).
 
 % City positions  required for rendering only
-position(a, 50, 50).
-position(b, 50, 100).
-position(c, 100, 50).
-position(d, 75, 75).
+position(one, 50, 50).
+position(two, 250, 50).
+position(three, 450, 50).
+position(four, 150, 150).
+position(five, 350, 150).
+position(six, 50, 250).
+position(seven, 250, 250).
+position(eight, 450, 250).
+position(nine, 150, 350).
+position(ten, 350, 350).
+position(eleven, 50, 450).
+position(twelve, 250, 450).
+position(thirteen, 450, 450).
 
 % Outlining valid tanks
 :-dynamic tank/2.
@@ -17,7 +50,7 @@ tank(black, City):- (road(City, _, _); road(_, City, _)), !.
 
 % Initial game state
 initialTankPositions(TankList):-
-	TankList = [tank(red, a), tank(red, c), tank(black, b), tank(black, d)].
+	TankList = [tank(black, six), tank(black, eleven), tank(black, twelve), tank(red, three), tank(red, two), tank(red, eight)].
 
 % Moves a tank from once city to an adjacent one, ensures:
 % i) From and To are adjacent
@@ -137,3 +170,45 @@ possibleMoves(TankLocation, TankList, [], Energy):-
 	
 otherTeam(black, red).
 otherTeam(red, black).
+
+fixMap(TankList, TankList):- playMap(TankList, Played), won(black, Played), !.
+fixMap(TankList, FixedTankList):-
+	addOne(black, TankList, OneRemoved),
+	fixMap(OneRemoved, FixedTankList).
+
+playMap(TankList, TankListAfter):-
+	playMapRedTurn(TankList, TankListAfter).
+playMapRedTurn(TankList, TankListAfter):-
+	doBestMoveForTeam(red, TankList, RedMove),
+	(won(red, RedMove), TankListAfter = RedMove, !; 
+		playMapBlackTurn(RedMove, TankListAfter)).
+playMapBlackTurn(TankList, TankListAfter):-
+	doBestMoveForTeam(black, TankList, BlackMove),
+	(won(black, BlackMove), TankListAfter = BlackMove, !; 
+		playMapRedTurn(BlackMove, TankListAfter)).
+
+
+addOne(Team, TankList, OneRemoved):-
+	emptyCities(TankList, EmptyCities),
+	random_member(City, EmptyCities),
+	OneRemoved = [tank(Team, City)|TankList].
+
+
+emptyCities(TankList, Cities):-
+	findall(City, road(City, _, _), CityLeft),
+	findall(City, road(_, City, _), CityRight),
+	append(CityLeft, CityRight, AllCities),
+	list_to_set(AllCities, CitySet),
+	removeOccupiedCities(CitySet, TankList, [], Cities).
+
+removeOccupiedCities([], _, Result, Result).
+removeOccupiedCities([City|CitySet], TankList, Cities, Result):-
+	(member(tank(_, City), TankList)) -> 
+		removeOccupiedCities(CitySet, TankList, Cities, Result);
+		removeOccupiedCities(CitySet, TankList, [City|Cities], Result).
+
+
+delete_one(_, [], []).
+delete_one(Term, [Term|Tail], Tail):- !.
+delete_one(Term, [Head|Tail], [Head|Result]) :-
+  delete_one(Term, Tail, Result).

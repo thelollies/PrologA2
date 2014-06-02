@@ -14,8 +14,6 @@ import java.util.ArrayList;
 import java.util.Hashtable;
 import java.util.List;
 
-import javax.swing.JPanel;
-
 import jpl.Atom;
 import jpl.Query;
 import jpl.Term;
@@ -151,10 +149,14 @@ public class GamePanel extends Game implements MouseListener{
 				repaint();
 			}
 		}else{
-			// TODO perform the move predicate, update tanks & energy if it succeeds,
-			// otherwise do nothing.
-			// Tank was already selected and we're clicking another one
-			if(tryAttack(selectedTankCity.getTank(), tank)) repaint();
+			if(tryAttack(selectedTankCity.getTank(), tank)){
+				repaint();
+				if(checkWin(true)){
+					if(gameChangeListener != null){
+						gameChangeListener.win(true);
+					}
+				}
+			}
 		}
 	}
 
@@ -202,7 +204,8 @@ public class GamePanel extends Game implements MouseListener{
 
 	private boolean tryAttack(Tank attacker, Tank victim) {
 		// calls fireOnPoint(From, At, Tanks, VictimRemoved)
-
+		if(energy - 25 < 0) return false; // Not enough energy
+		
 		Term[] args = 
 			{new Atom(attacker.getCity().name),
 				new Atom(victim.getCity().name),
@@ -341,7 +344,7 @@ public class GamePanel extends Game implements MouseListener{
 		playersTurn = false; // Prevent player input
 
 		// Pause so player can see what is happening
-		try{Thread.sleep(1000);} catch (InterruptedException e) {e.printStackTrace();}
+		try{Thread.sleep(2000);} catch (InterruptedException e) {e.printStackTrace();}
 		
 		// Get best move for comp
 		Term[] arg = 
@@ -358,7 +361,18 @@ public class GamePanel extends Game implements MouseListener{
 		}
 		
 		// Enable player input
+		energy = 100;
+		if(gameChangeListener != null) gameChangeListener.energyChanged(energy);
 		playersTurn = true;
 	}
 
+	public boolean fixMap(){
+		Query q = new Query("fixMap", new Term[]{toTankList(), new Variable("TankListAfter")});
+		Hashtable<?, ?> result = q.oneSolution();
+		if(result == null) return false; // couldn't fix map
+		loadTanksFromTerm((Term)result.get("TankListAfter"));
+		repaint();
+		return true;
+	}
+	
 }

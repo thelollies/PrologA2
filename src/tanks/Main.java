@@ -21,7 +21,7 @@ import jpl.Term;
 import jpl.Variable;
 
 
-public class Main extends JFrame implements ActionListener, GameChangeListener{
+public class Main extends JFrame implements GameChangeListener{
 
 	private static final long serialVersionUID = -5412761068511534848L;
 
@@ -74,20 +74,33 @@ public class Main extends JFrame implements ActionListener, GameChangeListener{
 		add(game, BorderLayout.CENTER);
 		
 		JButton endTurn = new JButton("End Turn");
-		endTurn.addActionListener(this);
+		endTurn.addActionListener(new ActionListener(){
+			@Override
+			public void actionPerformed(ActionEvent arg0) {
+				game.endTurn();
+			}
+		});
 
 		energyPane = new JTextPane();
 		energyPane.setText("Energy: ");
-
+		
 		JPanel bottomPanel = new JPanel();
 		bottomPanel.setLayout(new BorderLayout());
 		bottomPanel.add(endTurn, BorderLayout.WEST);
 		bottomPanel.add(energyPane, BorderLayout.EAST);
-
+		
 		add(bottomPanel, BorderLayout.SOUTH);
 
 		pack();
 		setVisible(true);
+		
+		if(game instanceof GamePanel){
+			int result = JOptionPane.showConfirmDialog(this, "Fix map before playing?");
+			if(result == JOptionPane.YES_OPTION){
+				GamePanel g = (GamePanel)game;
+				g.fixMap();
+			}
+		}
 		game.startGame();
 	}
 
@@ -95,11 +108,6 @@ public class Main extends JFrame implements ActionListener, GameChangeListener{
 		new Main(args.length > 0 && args[0].equalsIgnoreCase("-simple"));
 	}
 
-	@Override
-	public void actionPerformed(ActionEvent e) {
-		game.endTurn();
-	}
-	
 	@Override
 	public void energyChanged(int newScore){
 		this.energyPane.setText("Energy: " + newScore);
