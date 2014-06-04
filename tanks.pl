@@ -61,6 +61,7 @@ tanksKillable(TankLocation, TankList, Move, Killable):-
 	findall(Moves, possibleMoves(TankLocation, TankList, Moves, 100),Results),
 	bestMove(Results, Move, Killable).
 
+% Catches case where no moves are possible (apart from empty move)
 bestMove([], [], 0):- !.
 bestMove(Moves, Move, Killable):- bestMove_(Moves, Move, Killable).
 bestMove_(Moves, Move, Killable):-
@@ -68,10 +69,11 @@ bestMove_(Moves, Move, Killable):-
 bestMove_([], BestSoFar, BestSoFar, BestKillable, BestKillable).
 bestMove_([First|Rest], BestSoFar, BestMove, BestKillable, Killable):- 
 	aggregate_all(count, member(fireAt(_, _), First), FirstKillable),
-	(FirstKillable > BestKillable -> 
+	(FirstKillable >= BestKillable -> 
 		(NewBestMove = First, NewBestKillable = FirstKillable);
 		(NewBestMove = BestSoFar, NewBestKillable = BestKillable)),
 	bestMove_(Rest, NewBestMove, BestMove, NewBestKillable, Killable).
+
 
 doBestMoveForTeam(Team, TankList, NewTankList):-
 	findall(City, member(tank(Team, City), TankList), Positions),
@@ -79,17 +81,23 @@ doBestMoveForTeam(Team, TankList, NewTankList):-
 	bestMove(MoveList, BestMove, _),
 	doMoveList(BestMove, TankList, NewTankList).
 
+% True if the TankList is equivalent ot the MovedTankList
+% with the list of moves performed on TankList
 doMoveList([], NewTankList, NewTankList):- !.
 doMoveList([Move|Rest], TankList, NewTankList):-
 	doMove(Move, TankList, MovedTankList),
 	doMoveList(Rest, MovedTankList, NewTankList).
 
+% True if the UpdatedList is equivalent to the TankList after the
+% specified move is undertaken (fireAt\2 or moveTo\2)
 doMove(fireAt(_, Victim), TankList, UpdatedList):-
 	delete(TankList, tank(_, Victim), UpdatedList).
 doMove(moveTo(From, To), TankList, [tank(Team, To)|Removed]):-
 	member(tank(Team, From), TankList), !,
 	delete(TankList, tank(Team, From), Removed).
 
+% maps the tanksKillable predicate to a list of start positions
+% which gives a list of possible moves for a team
 mapTanksKillable([], _, []):- !.
 mapTanksKillable([TankLocation|Positions], TankList, [Move| Others]):-
 	tanksKillable(TankLocation, TankList, Move, _),
@@ -99,6 +107,9 @@ mapTanksKillable([TankLocation|Positions], TankList, [Move| Others]):-
 won(Team, TankList):-
 	otherTeam(Team, Other),
 	not(member(tank(Other, _), TankList)).
+
+% possibleMoves\4 creates a list of all possible move sequences for the
+% tank at the specified position.
 
 % Checks for win state
 possibleMoves(TankLocation, TankList, [], _):- 
@@ -118,15 +129,20 @@ possibleMoves(TankLocation, TankList, [], Energy):-
 	move(TankLocation, Adjacent, TankList, _, Energy, _))
 	*-> false; true.
 	
-	
+% Helper predicate to determine the other team	
 otherTeam(black, red).
 otherTeam(red, black).
 
+% Given a map, if it is found to be too hard to win (AI plays as both players
+% and does not win as the human player) a friendly tank is added to the map
+% until the AI player wins
 fixMap(TankList, TankList):- playMap(TankList, Played), won(black, Played), !.
 fixMap(TankList, FixedTankList):-
 	addOne(black, TankList, OneRemoved),
 	fixMap(OneRemoved, FixedTankList).
 
+% Plays a map through using the AI for each player. Gives the resulting
+% tank list.
 playMap(TankList, TankListAfter):-
 	playMapRedTurn(TankList, TankListAfter).
 playMapRedTurn(TankList, TankListAfter):-
@@ -138,13 +154,13 @@ playMapBlackTurn(TankList, TankListAfter):-
 	(won(black, BlackMove), TankListAfter = BlackMove, !; 
 		playMapRedTurn(BlackMove, TankListAfter)).
 
-
+% Adds a tank of the specified team to the tank list in a random position
 addOne(Team, TankList, OneRemoved):-
 	emptyCities(TankList, EmptyCities),
 	random_member(City, EmptyCities),
 	OneRemoved = [tank(Team, City)|TankList].
 
-
+% Gives a list of all cities which are not occupied in the given TankList
 emptyCities(TankList, Cities):-
 	findall(City, road(City, _, _), CityLeft),
 	findall(City, road(_, City, _), CityRight),
@@ -152,14 +168,10 @@ emptyCities(TankList, Cities):-
 	list_to_set(AllCities, CitySet),
 	removeOccupiedCities(CitySet, TankList, [], Cities).
 
+% Helper predicate which removes all cities from a list which 
+% are occupied, given a list of tanks
 removeOccupiedCities([], _, Result, Result).
 removeOccupiedCities([City|CitySet], TankList, Cities, Result):-
 	(member(tank(_, City), TankList)) -> 
 		removeOccupiedCities(CitySet, TankList, Cities, Result);
 		removeOccupiedCities(CitySet, TankList, [City|Cities], Result).
-
-
-delete_one(_, [], []).
-delete_one(Term, [Term|Tail], Tail):- !.
-delete_one(Term, [Head|Tail], [Head|Result]) :-
-  delete_one(Term, Tail, Result).
