@@ -28,13 +28,14 @@ public class Main extends JFrame implements GameChangeListener{
 	private JTextPane energyPane;
 	private Game game;
 
-	public Main(boolean simple){
+	public Main(boolean simple, String mapName){
 
 		Map<String, City> cityMap = new HashMap<String, City>();
 		List<Street> streets = new ArrayList<Street>();
 
 		// Load tanks.pl
-		new Query("[tanks]").hasSolution(); 
+		new Query("[tanks]").hasSolution();
+		new Query("["+mapName+"]").hasSolution();
 
 		// Query to find streets
 		Term arg[] = {new Variable("From"), new Variable("To"), new Variable("Cost")};
@@ -59,7 +60,7 @@ public class Main extends JFrame implements GameChangeListener{
 				to = new City(toTerm.toString(), toPos.x, toPos.y);
 				cityMap.put(toTerm.toString(), to);
 			}
-			
+
 			streets.add(new Street(costTerm.intValue() ,from, to));
 		}
 
@@ -69,10 +70,10 @@ public class Main extends JFrame implements GameChangeListener{
 			game = new GamePanelSimple(new ArrayList<City>(cityMap.values()), streets);
 		else
 			game = new GamePanel(new ArrayList<City>(cityMap.values()), streets);
-		
+
 		game.setGameChangeListener(this);
 		add(game, BorderLayout.CENTER);
-		
+
 		JButton endTurn = new JButton("End Turn");
 		endTurn.addActionListener(new ActionListener(){
 			@Override
@@ -83,29 +84,33 @@ public class Main extends JFrame implements GameChangeListener{
 
 		energyPane = new JTextPane();
 		energyPane.setText("Energy: ");
-		
+
 		JPanel bottomPanel = new JPanel();
 		bottomPanel.setLayout(new BorderLayout());
 		bottomPanel.add(endTurn, BorderLayout.WEST);
 		bottomPanel.add(energyPane, BorderLayout.EAST);
-		
+
 		add(bottomPanel, BorderLayout.SOUTH);
 
 		pack();
 		setVisible(true);
-		
+
 		if(game instanceof GamePanel){
 			int result = JOptionPane.showConfirmDialog(this, "Fix map before playing?");
 			if(result == JOptionPane.YES_OPTION){
 				GamePanel g = (GamePanel)game;
-				g.fixMap();
+				if(!g.fixMap()){
+					JOptionPane.showConfirmDialog(this, "Could not fix the map.");
+				}
 			}
 		}
 		game.startGame();
 	}
 
 	public static void main(String[] args){
-		new Main(args.length > 0 && args[0].equalsIgnoreCase("-simple"));
+		String mapName = args[0];
+		boolean simpleMode = args.length > 1 && args[1].equalsIgnoreCase("-simple");
+		new Main(simpleMode, mapName);
 	}
 
 	@Override
@@ -121,7 +126,7 @@ public class Main extends JFrame implements GameChangeListener{
 		Hashtable<?,?> result = (Hashtable<?, ?>)q.oneSolution();
 		Term x = (Term)result.get("X");
 		Term y = (Term)result.get("Y");
-		
+
 		return new Point(x.intValue(), y.intValue());
 	}
 
